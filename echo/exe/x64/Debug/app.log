@@ -1,4 +1,0 @@
-﻿  Building 'app' with toolset 'WindowsApplicationForDrivers10.0' and the 'Universal' target platform.
-  app.cpp
-  app.vcxproj -> F:\work_space\git_repo_public\WINDOWS_DRIVER_SAMPLES\echo\exe\x64\Debug\echoapp.exe
-  Driver is a Universal Driver.
