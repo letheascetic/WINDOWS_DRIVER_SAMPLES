@@ -1,0 +1,22 @@
+﻿  Building 'kmdf_usb' with toolset 'WindowsKernelModeDriver10.0' and the 'Universal' target platform.
+  Stamping Debug\kmdf_usb.inf
+  Stamping [Version] section with DriverVer=01/04/2019,11.28.42.496
+  Device.c
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(92): error C2220: 警告被视为错误 - 没有生成“object”文件
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(92): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(93): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(94): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(95): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+  Driver.c
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(92): error C2220: 警告被视为错误 - 没有生成“object”文件
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(92): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(93): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(94): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(95): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+  Queue.c
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(92): error C2220: 警告被视为错误 - 没有生成“object”文件
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(92): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(93): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(94): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+f:\work_space\git_repo_public\windows_driver_samples\kmdf_usb\kmdf_usb\public.h(95): warning C4214: 使用了非标准扩展: 整形以外的位域类型
+  正在生成代码...
