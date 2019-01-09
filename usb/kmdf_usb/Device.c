@@ -76,7 +76,7 @@ Return Value:
 	WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&pnpPowerCallbacks);
 
 	// 对于USB设备，需要在EvtDevicePrepareHardware回调函数中选择接口、配置设备
-	// pnpPowerCallbacks.EvtDevicePrepareHardware = KmdfUsbEvtDevicePrepareHardware;
+	pnpPowerCallbacks.EvtDevicePrepareHardware = KmdfUsbEvtDevicePrepareHardware;
 
 	// These two callbacks start and stop the wdfusb pipe continuous reader as we go in and out of the D0-working state.
 	// pnpPowerCallbacks.EvtDeviceD0Entry = KmdfUsbEvtDeviceD0Entry;
@@ -366,7 +366,6 @@ Return Value:
 	waitWakeEnable = FALSE;
 	pDeviceContext = GetDeviceContext(Device);
 
-    //
     // Create a USB device handle so that we can communicate with the
     // underlying USB stack. The WDFUSBDEVICE handle is used to query,
     // configure, and manage all aspects of the USB device.
@@ -376,15 +375,12 @@ Return Value:
     // for resource rebalance, we will use the same device handle but then select
     // the interfaces again because the USB stack could reconfigure the device on
     // restart.
-    //
+	// 创建USB设备句柄，选择设备接口，句柄只在第一次调用时创建，接口在重启后重新配置
     if (pDeviceContext->UsbDevice == NULL) {
-
-        //
         // Specifying a client contract version of 602 enables us to query for
         // and use the new capabilities of the USB driver stack for Windows 8.
         // It also implies that we conform to rules mentioned in MSDN
         // documentation for WdfUsbTargetDeviceCreateWithParameters.
-        //
 		WDF_USB_DEVICE_CREATE_CONFIG config;
 		WDF_USB_DEVICE_CREATE_CONFIG_INIT(&config, USBD_CLIENT_CONTRACT_VERSION_602);
 
@@ -395,8 +391,7 @@ Return Value:
                                                     );
 
         if (!NT_SUCCESS(status)) {
-			TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP,
-				"WdfUsbTargetDeviceCreateWithParameters failed with Status code %!STATUS!\n", status);
+			TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP, "WdfUsbTargetDeviceCreateWithParameters failed with Status code %!STATUS!\n", status);
             return status;
         }
 
@@ -407,15 +402,11 @@ Return Value:
 		//
     }
 
-	//
 	// Retrieve USBD version information, port driver capabilites and device
 	// capabilites such as speed, power, etc.
-	//
 	WDF_USB_DEVICE_INFORMATION_INIT(&deviceInfo);
 
-	status = WdfUsbTargetDeviceRetrieveInformation(
-		pDeviceContext->UsbDevice,
-		&deviceInfo);
+	status = WdfUsbTargetDeviceRetrieveInformation(pDeviceContext->UsbDevice, &deviceInfo);
 
 	if (NT_SUCCESS(status)) {
 		TraceEvents(TRACE_LEVEL_INFORMATION, DBG_PNP, "IsDeviceHighSpeed: %s\n",
@@ -427,9 +418,7 @@ Return Value:
 
 		TraceEvents(TRACE_LEVEL_INFORMATION, DBG_PNP, "IsDeviceRemoteWakeable: %s\n", waitWakeEnable ? "TRUE" : "FALSE");
 
-		//
 		// Save these for use later.
-		//
 		pDeviceContext->UsbDeviceTraits = deviceInfo.Traits;
 	}
 	else {
@@ -442,9 +431,7 @@ Return Value:
 		return status;
 	}
 
-	//
 	// Enable wait-wake and idle timeout if the device supports it
-	//
 	if (waitWakeEnable) {
 		status = KmdfUsbSetPowerPolicy(Device);
 		if (!NT_SUCCESS(status)) {
@@ -473,9 +460,7 @@ KmdfUsbSetPowerPolicy(
 
 	PAGED_CODE();
 
-	//
 	// Init the idle policy structure.
-	//
 	WDF_DEVICE_POWER_POLICY_IDLE_SETTINGS_INIT(&idleSettings, IdleUsbSelectiveSuspend);
 	idleSettings.IdleTimeout = 10000; // 10-sec
 
@@ -485,9 +470,7 @@ KmdfUsbSetPowerPolicy(
 		return status;
 	}
 
-	//
 	// Init wait-wake policy structure.
-	//
 	WDF_DEVICE_POWER_POLICY_WAKE_SETTINGS_INIT(&wakeSettings);
 
 	status = WdfDeviceAssignSxWakeSettings(Device, &wakeSettings);
@@ -539,14 +522,11 @@ Return Value:
 		&configParams);
 
 	if (!NT_SUCCESS(status)) {
-
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP, "WdfUsbTargetDeviceSelectConfig failed %!STATUS! \n", status);
 
-		//
 		// Since the Osr USB fx2 device is capable of working at high speed, the only reason
 		// the device would not be working at high speed is if the port doesn't
 		// support it. If the port doesn't support high speed it is a 1.1 port
-		//
 		if ((pDeviceContext->UsbDeviceTraits & WDF_USB_DEVICE_TRAIT_AT_HIGH_SPEED) == 0) {
 			TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP,
 				" On a 1.1 USB port on Windows Vista"
@@ -573,9 +553,7 @@ Return Value:
 
 	numberConfiguredPipes = configParams.Types.SingleInterface.NumberConfiguredPipes;
 
-	//
 	// Get pipe handles
-	//
 	for (index = 0; index < numberConfiguredPipes; index++) {
 
 		WDF_USB_PIPE_INFORMATION_INIT(&pipeInfo);
@@ -586,37 +564,29 @@ Return Value:
 			&pipeInfo
 		);
 
-		//
-		// Tell the framework that it's okay to read less than
-		// MaximumPacketSize
-		//
+		// Tell the framework that it's okay to read less than MaximumPacketSize
 		WdfUsbTargetPipeSetNoMaximumPacketSizeCheck(pipe);
 
 		if (WdfUsbPipeTypeInterrupt == pipeInfo.PipeType) {
-			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL,
-				"Interrupt Pipe is 0x%p\n", pipe);
+			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "Interrupt Pipe is 0x%p\n", pipe);
 			pDeviceContext->InterruptPipe = pipe;
 		}
 
 		if (WdfUsbPipeTypeBulk == pipeInfo.PipeType &&
 			WdfUsbTargetPipeIsInEndpoint(pipe)) {
-			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL,
-				"BulkInput Pipe is 0x%p\n", pipe);
+			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "BulkInput Pipe is 0x%p\n", pipe);
 			pDeviceContext->BulkReadPipe = pipe;
 		}
 
 		if (WdfUsbPipeTypeBulk == pipeInfo.PipeType &&
 			WdfUsbTargetPipeIsOutEndpoint(pipe)) {
-			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL,
-				"BulkOutput Pipe is 0x%p\n", pipe);
+			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "BulkOutput Pipe is 0x%p\n", pipe);
 			pDeviceContext->BulkWritePipe = pipe;
 		}
 
 	}
 
-	//
 	// If we didn't find all the 3 pipes, fail the start.
-	//
 	if (!(pDeviceContext->BulkWritePipe
 		&& pDeviceContext->BulkReadPipe && pDeviceContext->InterruptPipe)) {
 		status = STATUS_INVALID_DEVICE_STATE;

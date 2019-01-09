@@ -34,17 +34,15 @@ Return Value:
 
 	contReaderConfig.EvtUsbTargetPipeReadersFailed = KmdfUsbEvtUsbInterruptReadersFailed;
 
-	//
 	// Reader requests are not posted to the target automatically.
 	// Driver must explictly call WdfIoTargetStart to kick start the
 	// reader.  In this sample, it's done in D0Entry.
 	// By defaut, framework queues two requests to the target
 	// endpoint. Driver can configure up to 10 requests with CONFIG macro.
-	//
 	status = WdfUsbTargetPipeConfigContinuousReader(DeviceContext->InterruptPipe, &contReaderConfig);
 
 	if (!NT_SUCCESS(status)) {
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP, "OsrFxConfigContReaderForInterruptEndPoint failed %x\n", status);
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP, "KmdfUsbConfigContReaderForInterruptEndPoint failed %x\n", status);
 		return status;
 	}
 
