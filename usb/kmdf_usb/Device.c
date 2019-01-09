@@ -21,9 +21,10 @@ Environment:
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, KmdfUsbEvtDeviceAdd)
 #pragma alloc_text (PAGE, KmdfUsbEvtDevicePrepareHardware)
+#pragma alloc_text(PAGE, KmdfUsbEvtDeviceD0Exit)
 #pragma alloc_text(PAGE, KmdfUsbSetPowerPolicy)
 #pragma alloc_text (PAGE, SelectInterfaces)
-
+#pragma alloc_text (PAGE, GetDeviceEventLoggingNames)
 #endif
 
 
@@ -79,9 +80,9 @@ Return Value:
 	pnpPowerCallbacks.EvtDevicePrepareHardware = KmdfUsbEvtDevicePrepareHardware;
 
 	// These two callbacks start and stop the wdfusb pipe continuous reader as we go in and out of the D0-working state.
-	// pnpPowerCallbacks.EvtDeviceD0Entry = KmdfUsbEvtDeviceD0Entry;
-	// pnpPowerCallbacks.EvtDeviceD0Exit = KmdfUsbEvtDeviceD0Exit;
-	// pnpPowerCallbacks.EvtDeviceSelfManagedIoFlush = KmdfUsbEvtDeviceSelfManagedIoFlush;
+	pnpPowerCallbacks.EvtDeviceD0Entry = KmdfUsbEvtDeviceD0Entry;
+	pnpPowerCallbacks.EvtDeviceD0Exit = KmdfUsbEvtDeviceD0Exit;
+	pnpPowerCallbacks.EvtDeviceSelfManagedIoFlush = KmdfUsbEvtDeviceSelfManagedIoFlush;
 
 	WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &pnpPowerCallbacks);
 
@@ -105,7 +106,7 @@ Return Value:
 
 	// Get the device's friendly name and location so that we can use it in
 	// error logging.  If this fails then it will setup dummy strings.
-	// GetDeviceEventLoggingNames(device);
+	GetDeviceEventLoggingNames(device);
 
 	// 初始化PNP属性。允许设备异常拔除，系统不会弹出错误框
 	WDF_DEVICE_PNP_CAPABILITIES_INIT(&pnpCaps);
@@ -118,7 +119,7 @@ Return Value:
 	// completed with error status automatically by the framework.
 	// 创建默认队列，并行模式，注册处理ioctl请求的回调函数
 	WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&ioQueueConfig, WdfIoQueueDispatchParallel);
-	// ioQueueConfig.EvtIoDeviceControl = OsrFxEvtIoDeviceControl;
+	ioQueueConfig.EvtIoDeviceControl = KmdfUsbEvtIoDeviceControl;
 
 	// By default, Static Driver Verifier (SDV) displays a warning if it
 	// doesn't find the EvtIoStop callback on a power-managed queue.
@@ -596,4 +597,285 @@ Return Value:
 	}
 
 	return status;
+}
+
+NTSTATUS
+KmdfUsbEvtDeviceD0Entry(
+	WDFDEVICE Device,
+	WDF_POWER_DEVICE_STATE PreviousState
+)
+/*++
+
+Routine Description:
+
+	EvtDeviceD0Entry event callback must perform any operations that are
+	necessary before the specified device is used.  It will be called every
+	time the hardware needs to be (re-)initialized.
+
+	This function is not marked pageable because this function is in the
+	device power up path. When a function is marked pagable and the code
+	section is paged out, it will generate a page fault which could impact
+	the fast resume behavior because the client driver will have to wait
+	until the system drivers can service this page fault.
+
+	This function runs at PASSIVE_LEVEL, even though it is not paged.  A
+	driver can optionally make this function pageable if DO_POWER_PAGABLE
+	is set.  Even if DO_POWER_PAGABLE isn't set, this function still runs
+	at PASSIVE_LEVEL.  In this case, though, the function absolutely must
+	not do anything that will cause a page fault.
+
+Arguments:
+
+	Device - Handle to a framework device object.
+
+	PreviousState - Device power state which the device was in most recently.
+		If the device is being newly started, this will be
+		PowerDeviceUnspecified.
+
+Return Value:
+
+	NTSTATUS
+
+--*/
+{
+	PDEVICE_CONTEXT         pDeviceContext;
+	NTSTATUS                status;
+	BOOLEAN                 isTargetStarted;
+
+	pDeviceContext = GetDeviceContext(Device);
+	isTargetStarted = FALSE;
+
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_POWER, "-->KmdfUsbEvtDeviceD0Entry - coming from %s\n", DbgDevicePowerString(PreviousState));
+
+	// Since continuous reader is configured for this interrupt-pipe, we must explicitly start
+	// the I/O target to get the framework to post read requests.
+	status = WdfIoTargetStart(WdfUsbTargetPipeGetIoTarget(pDeviceContext->InterruptPipe));
+	if (!NT_SUCCESS(status)) {
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_POWER, "Failed to start interrupt pipe %!STATUS!\n", status);
+		goto End;
+	}
+
+	isTargetStarted = TRUE;
+
+End:
+
+	if (!NT_SUCCESS(status)) {
+		// Failure in D0Entry will lead to device being removed. So let us stop the continuous reader in preparation for the ensuing remove.
+		if (isTargetStarted) {
+			WdfIoTargetStop(WdfUsbTargetPipeGetIoTarget(pDeviceContext->InterruptPipe), WdfIoTargetCancelSentIo);
+		}
+	}
+
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_POWER, "<--KmdfUsbEvtDeviceD0Entry\n");
+
+	return status;
+}
+
+
+NTSTATUS
+KmdfUsbEvtDeviceD0Exit(
+	WDFDEVICE Device,
+	WDF_POWER_DEVICE_STATE TargetState
+)
+/*++
+
+Routine Description:
+
+	This routine undoes anything done in EvtDeviceD0Entry.  It is called
+	whenever the device leaves the D0 state, which happens when the device is
+	stopped, when it is removed, and when it is powered off.
+
+	The device is still in D0 when this callback is invoked, which means that
+	the driver can still touch hardware in this routine.
+
+
+	EvtDeviceD0Exit event callback must perform any operations that are
+	necessary before the specified device is moved out of the D0 state.  If the
+	driver needs to save hardware state before the device is powered down, then
+	that should be done here.
+
+	This function runs at PASSIVE_LEVEL, though it is generally not paged.  A
+	driver can optionally make this function pageable if DO_POWER_PAGABLE is set.
+
+	Even if DO_POWER_PAGABLE isn't set, this function still runs at
+	PASSIVE_LEVEL.  In this case, though, the function absolutely must not do
+	anything that will cause a page fault.
+
+Arguments:
+
+	Device - Handle to a framework device object.
+
+	TargetState - Device power state which the device will be put in once this
+		callback is complete.
+
+Return Value:
+
+	Success implies that the device can be used.  Failure will result in the
+	device stack being torn down.
+
+--*/
+{
+	PDEVICE_CONTEXT         pDeviceContext;
+
+	PAGED_CODE();
+
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_POWER,
+		"-->KmdfUsbEvtDeviceD0Exit - moving to %s\n",
+		DbgDevicePowerString(TargetState));
+
+	pDeviceContext = GetDeviceContext(Device);
+
+	WdfIoTargetStop(WdfUsbTargetPipeGetIoTarget(pDeviceContext->InterruptPipe), WdfIoTargetCancelSentIo);
+
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_POWER, "<--KmdfUsbEvtDeviceD0Exit\n");
+
+	return STATUS_SUCCESS;
+}
+
+VOID
+KmdfUsbEvtDeviceSelfManagedIoFlush(
+	_In_ WDFDEVICE Device
+)
+/*++
+
+Routine Description:
+
+	This routine handles flush activity for the device's
+	self-managed I/O operations.
+
+Arguments:
+
+	Device - Handle to a framework device object.
+
+Return Value:
+
+	None
+
+--*/
+{
+	// Service the interrupt message queue to drain any outstanding requests
+	KmdfUsbIoctlGetInterruptMessage(Device, STATUS_DEVICE_REMOVED);
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+PCHAR
+DbgDevicePowerString(
+	_In_ WDF_POWER_DEVICE_STATE Type
+)
+{
+	switch (Type)
+	{
+	case WdfPowerDeviceInvalid:
+		return "WdfPowerDeviceInvalid";
+	case WdfPowerDeviceD0:
+		return "WdfPowerDeviceD0";
+	case WdfPowerDeviceD1:
+		return "WdfPowerDeviceD1";
+	case WdfPowerDeviceD2:
+		return "WdfPowerDeviceD2";
+	case WdfPowerDeviceD3:
+		return "WdfPowerDeviceD3";
+	case WdfPowerDeviceD3Final:
+		return "WdfPowerDeviceD3Final";
+	case WdfPowerDevicePrepareForHibernation:
+		return "WdfPowerDevicePrepareForHibernation";
+	case WdfPowerDeviceMaximum:
+		return "WdfPowerDeviceMaximum";
+	default:
+		return "UnKnown Device Power State";
+	}
+}
+
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID
+GetDeviceEventLoggingNames(
+	_In_ WDFDEVICE Device
+)
+/*++
+
+Routine Description:
+
+	Retrieve the friendly name and the location string into WDFMEMORY objects
+	and store them in the device context.
+
+Arguments:
+
+Return Value:
+
+	None
+
+--*/
+{
+	PDEVICE_CONTEXT pDevContext = GetDeviceContext(Device);
+
+	WDF_OBJECT_ATTRIBUTES objectAttributes;
+
+	WDFMEMORY deviceNameMemory = NULL;
+	WDFMEMORY locationMemory = NULL;
+
+	NTSTATUS status;
+
+	PAGED_CODE();
+
+	//
+	// We want both memory objects to be children of the device so they will
+	// be deleted automatically when the device is removed.
+	//
+
+	WDF_OBJECT_ATTRIBUTES_INIT(&objectAttributes);
+	objectAttributes.ParentObject = Device;
+
+	//
+	// First get the length of the string. If the FriendlyName
+	// is not there then get the lenght of device description.
+	//
+
+	status = WdfDeviceAllocAndQueryProperty(Device,
+		DevicePropertyFriendlyName,
+		NonPagedPoolNx,
+		&objectAttributes,
+		&deviceNameMemory);
+
+	if (!NT_SUCCESS(status))
+	{
+		status = WdfDeviceAllocAndQueryProperty(Device,
+			DevicePropertyDeviceDescription,
+			NonPagedPoolNx,
+			&objectAttributes,
+			&deviceNameMemory);
+	}
+
+	if (NT_SUCCESS(status))
+	{
+		pDevContext->DeviceNameMemory = deviceNameMemory;
+		pDevContext->DeviceName = WdfMemoryGetBuffer(deviceNameMemory, NULL);
+	}
+	else
+	{
+		pDevContext->DeviceNameMemory = NULL;
+		pDevContext->DeviceName = L"(error retrieving name)";
+	}
+
+	//
+	// Retrieve the device location string.
+	//
+
+	status = WdfDeviceAllocAndQueryProperty(Device,
+		DevicePropertyLocationInformation,
+		NonPagedPoolNx,
+		WDF_NO_OBJECT_ATTRIBUTES,
+		&locationMemory);
+
+	if (NT_SUCCESS(status))
+	{
+		pDevContext->LocationMemory = locationMemory;
+		pDevContext->Location = WdfMemoryGetBuffer(locationMemory, NULL);
+	}
+	else
+	{
+		pDevContext->LocationMemory = NULL;
+		pDevContext->Location = L"(error retrieving location)";
+	}
+
+	return;
 }

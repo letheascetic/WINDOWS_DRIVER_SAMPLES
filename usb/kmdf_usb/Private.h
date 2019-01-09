@@ -18,6 +18,39 @@
 #ifndef _PRIVATE_H_
 #define _PRIVATE_H_
 
+#define POOL_TAG (ULONG) 'FRSO'
+#define _DRIVER_NAME_ "KMDFUSB"
+
+#define TEST_BOARD_TRANSFER_BUFFER_SIZE (64*1024)
+#define DEVICE_DESC_LENGTH 256
+
+extern const __declspec(selectany) LONGLONG DEFAULT_CONTROL_TRANSFER_TIMEOUT = 5 * -1 * WDF_TIMEOUT_TO_SEC;
+
+//
+// Define the vendor commands supported by our device
+//
+#define USBFX2LK_READ_7SEGMENT_DISPLAY      0xD4
+#define USBFX2LK_READ_SWITCHES              0xD6
+#define USBFX2LK_READ_BARGRAPH_DISPLAY      0xD7
+#define USBFX2LK_SET_BARGRAPH_DISPLAY       0xD8
+#define USBFX2LK_IS_HIGH_SPEED              0xD9
+#define USBFX2LK_REENUMERATE                0xDA
+#define USBFX2LK_SET_7SEGMENT_DISPLAY       0xDB
+
+//
+// Define the features that we can clear
+//  and set on our device
+//
+#define USBFX2LK_FEATURE_EPSTALL            0x00
+#define USBFX2LK_FEATURE_WAKE               0x01
+
+//
+// Order of endpoints in the interface descriptor
+//
+#define INTERRUPT_IN_ENDPOINT_INDEX    0
+#define BULK_OUT_ENDPOINT_INDEX        1
+#define BULK_IN_ENDPOINT_INDEX         2
+
 //
 // The device context performs the same job as a WDM device extension in the driver frameworks
 //
@@ -102,7 +135,21 @@ extern PFN_IO_SET_DEVICE_INTERFACE_PROPERTY_DATA g_pIoSetDeviceInterfaceProperty
 
 DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_OBJECT_CONTEXT_CLEANUP KmdfUsbEvtDriverContextCleanup;
+EVT_WDF_DEVICE_D0_ENTRY KmdfUsbEvtDeviceD0Entry;
+EVT_WDF_DEVICE_D0_EXIT KmdfUsbEvtDeviceD0Exit;
+EVT_WDF_DEVICE_SELF_MANAGED_IO_FLUSH KmdfUsbEvtDeviceSelfManagedIoFlush;
 
+_IRQL_requires_(PASSIVE_LEVEL)
+PCHAR
+DbgDevicePowerString(
+	_In_ WDF_POWER_DEVICE_STATE Type
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID
+GetDeviceEventLoggingNames(
+	_In_ WDFDEVICE Device
+);
 
 //
 // Device.c func
@@ -149,15 +196,71 @@ KmdfUsbEvtUsbInterruptReadersFailed(
 );
 
 
+//
+// Ioctl.c func
+//
 
+EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL KmdfUsbEvtIoDeviceControl;
 
+_IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS
-KmdfUsbQueueInitialize(
+ResetPipe(
+	_In_ WDFUSBPIPE Pipe
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+ResetDevice(
 	_In_ WDFDEVICE Device
 );
 
-EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL KmdfUsbEvtIoDeviceControl;
-EVT_WDF_IO_QUEUE_IO_STOP KmdfUsbEvtIoStop;
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+ReenumerateDevice(
+	_In_ PDEVICE_CONTEXT DevContext
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+GetBarGraphState(
+	_In_ PDEVICE_CONTEXT DevContext,
+	_Out_ PBAR_GRAPH_STATE BarGraphState
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+SetBarGraphState(
+	_In_ PDEVICE_CONTEXT DevContext,
+	_In_ PBAR_GRAPH_STATE BarGraphState
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+GetSevenSegmentState(
+	_In_ PDEVICE_CONTEXT DevContext,
+	_Out_ PUCHAR SevenSegment
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+SetSevenSegmentState(
+	_In_ PDEVICE_CONTEXT DevContext,
+	_In_ PUCHAR SevenSegment
+);
+
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS
+GetSwitchState(
+	_In_ PDEVICE_CONTEXT DevContext,
+	_In_ PSWITCH_STATE SwitchState
+);
+
+VOID
+KmdfUsbIoctlGetInterruptMessage(
+	_In_ WDFDEVICE Device,
+	_In_ NTSTATUS ReaderStatus
+);
+
 
 //
 // Others

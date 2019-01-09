@@ -96,8 +96,7 @@ Return Value:
 
 	if (NumBytesTransferred == 0) {
 		TraceEvents(TRACE_LEVEL_WARNING, DBG_INIT,
-			"KmdfUsbEvtUsbInterruptPipeReadComplete Zero length read "
-			"occured on the Interrupt Pipe's Continuous Reader\n"
+			"KmdfUsbEvtUsbInterruptPipeReadComplete Zero length read occured on the Interrupt Pipe's Continuous Reader\n"
 		);
 		return;
 	}
@@ -107,13 +106,10 @@ Return Value:
 
 	switchState = WdfMemoryGetBuffer(Buffer, NULL);
 
-	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_INIT,
-		"KmdfUsbEvtUsbInterruptPipeReadComplete SwitchState %x\n",
-		*switchState);
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_INIT, "KmdfUsbEvtUsbInterruptPipeReadComplete SwitchState %x\n", *switchState);
 
 	pDeviceContext->CurrentSwitchState = *switchState;
 
-	//
 	// Handle any pending Interrupt Message IOCTLs. Note that the OSR USB device
 	// will generate an interrupt message when the the device resumes from a low
 	// power state. So if the Interrupt Message IOCTL was sent after the device
@@ -122,8 +118,8 @@ Return Value:
 	// dip switches on the OSR USB device. If this is not the desired behavior
 	// for your driver, then you could handle this condition by maintaining a
 	// state variable on D0Entry to track interrupt messages caused by power up.
-	//
-	// OsrUsbIoctlGetInterruptMessage(device, STATUS_SUCCESS);
+
+	KmdfUsbIoctlGetInterruptMessage(device, STATUS_SUCCESS);
 
 }
 
@@ -140,15 +136,11 @@ KmdfUsbEvtUsbInterruptReadersFailed(
 
 	UNREFERENCED_PARAMETER(UsbdStatus);
 
-	//
 	// Clear the current switch state.
-	//
 	pDeviceContext->CurrentSwitchState = 0;
 
-	//
 	// Service the pending interrupt switch change request
-	//
-	// OsrUsbIoctlGetInterruptMessage(device, Status);
+	KmdfUsbIoctlGetInterruptMessage(device, Status);
 
 	return TRUE;
 }
