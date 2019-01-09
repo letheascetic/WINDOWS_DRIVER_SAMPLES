@@ -55,34 +55,21 @@ extern const __declspec(selectany) LONGLONG DEFAULT_CONTROL_TRANSFER_TIMEOUT = 5
 // The device context performs the same job as a WDM device extension in the driver frameworks
 //
 typedef struct _DEVICE_CONTEXT {
-
-	WDFUSBDEVICE                    UsbDevice;
-
-	WDFUSBINTERFACE                 UsbInterface;
-
-	WDFUSBPIPE                      BulkReadPipe;
-
-	WDFUSBPIPE                      BulkWritePipe;
-
-	WDFUSBPIPE                      InterruptPipe;
-
-	WDFWAITLOCK                     ResetDeviceWaitLock;
-
+	WDFUSBDEVICE                    UsbDevice;						// USB设备对象	
+	WDFUSBINTERFACE                 UsbInterface;					// USB接口对象（设备只使用单个接口）
+	WDFUSBPIPE                      BulkReadPipe;					// 批量读管道
+	WDFUSBPIPE                      BulkWritePipe;					// 批量写管道
+	WDFUSBPIPE                      InterruptPipe;					// 中断管道
+	WDFWAITLOCK                     ResetDeviceWaitLock;			// wait-lock对象，来同步ResetDevice的处理
 	UCHAR                           CurrentSwitchState;
-
 	WDFQUEUE                        InterruptMsgQueue;
-
 	ULONG                           UsbDeviceTraits;
 
-	//
 	// The following fields are used during event logging to 
 	// report the events relative to this specific instance 
 	// of the device.
-	//
-
 	WDFMEMORY                       DeviceNameMemory;
 	PCWSTR                          DeviceName;
-
 	WDFMEMORY                       LocationMemory;
 	PCWSTR                          Location;
 

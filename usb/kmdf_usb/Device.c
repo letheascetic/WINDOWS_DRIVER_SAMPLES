@@ -86,7 +86,7 @@ Return Value:
 
 	WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &pnpPowerCallbacks);
 
-	// 设置IO请求的缓冲方式，默认为Buffered方式，另外两种方式是Direct和Neither。
+	// 设置驱动访问I/O读写请求的数据缓冲区的方式，默认为Buffered方式
 	WdfDeviceInitSetIoType(DeviceInit, WdfDeviceIoBuffered);
 
 	// 初始化设备对象的属性和环境变量
@@ -112,6 +112,13 @@ Return Value:
 	WDF_DEVICE_PNP_CAPABILITIES_INIT(&pnpCaps);
 	pnpCaps.SurpriseRemovalOK = WdfTrue;
 	WdfDeviceSetPnpCapabilities(device, &pnpCaps);
+
+
+	// 创建队列，共四个队列
+	// a) 默认并行队列，分发IO请求
+	// b) 非默认串行队列，处理IO读请求
+	// c) 非默认串行队列，处理IO写请求
+	// d) 非默认手工队列，处理中断消息读请求（需要等待中断的出现才能完成）
 
 	// Create a parallel default queue and register an event callback to
 	// receive ioctl requests. We will create separate queues for
@@ -235,7 +242,7 @@ Return Value:
 		goto Error;
 	}
 
-	// 注册设备接口
+	// 注册设备接口名
 	status = WdfDeviceCreateDeviceInterface(device,
 		(LPGUID)&GUID_DEVINTERFACE_KMDFUSB,
 		NULL); // Reference String
@@ -245,9 +252,9 @@ Return Value:
 		goto Error;
 	}
 
-	// Create the lock that we use to serialize calls to ResetDevice(). As an
-	// alternative to using a WDFWAITLOCK to serialize the calls, a sequential
-	// WDFQUEUE can be created and reset IOCTLs would be forwarded to it.
+	// 创建wait-lock对象，来同步ResetDevice的处理
+	// 需要同步处理时，调用WdfWaitLockAcquire和WdfWaitLockRelease来获取和释放锁
+	// 将device设为wait-lock对象的父对象，则设备被移除（device被删除）时，框架也将自动删除wait-lock对象
 	WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
 	attributes.ParentObject = device;
 
@@ -269,6 +276,7 @@ Return Value:
 			goto Error;
 		}
 
+		// 获取设备接口名对应的WDFSTRING对象
 		status = WdfDeviceRetrieveDeviceInterfaceString(device,
 			(LPGUID)&GUID_DEVINTERFACE_KMDFUSB,
 			NULL,
@@ -279,6 +287,7 @@ Return Value:
 			goto Error;
 		}
 
+		// 返回WDFSTRING对象对应的UNICOND_STRING对象
 		WdfStringGetUnicodeString(symbolicLinkString, &symbolicLinkName);
 
 		isRestricted = DEVPROP_TRUE;
@@ -299,7 +308,7 @@ Return Value:
 		WdfObjectDelete(symbolicLinkString);
 	}
 
-	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_PNP, "<-- OsrFxEvtDeviceAdd\n");
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_PNP, "<-- KmdfUsbEvtDeviceAdd\n");
 
 	return status;
 
@@ -385,6 +394,7 @@ Return Value:
 		WDF_USB_DEVICE_CREATE_CONFIG config;
 		WDF_USB_DEVICE_CREATE_CONFIG_INIT(&config, USBD_CLIENT_CONTRACT_VERSION_602);
 
+		// 创建并打开USB设备对象
         status = WdfUsbTargetDeviceCreateWithParameters(Device,
                                                     &config,
                                                     WDF_NO_OBJECT_ATTRIBUTES,
@@ -403,10 +413,9 @@ Return Value:
 		//
     }
 
-	// Retrieve USBD version information, port driver capabilites and device
-	// capabilites such as speed, power, etc.
+	// Retrieve USBD version information, port driver capabilites and device capabilites such as speed, power, etc.
+	// 获取USB设备的版本信息、端口驱动能力、设备速度、电源能力等
 	WDF_USB_DEVICE_INFORMATION_INIT(&deviceInfo);
-
 	status = WdfUsbTargetDeviceRetrieveInformation(pDeviceContext->UsbDevice, &deviceInfo);
 
 	if (NT_SUCCESS(status)) {
@@ -426,6 +435,7 @@ Return Value:
 		pDeviceContext->UsbDeviceTraits = 0;
 	}
 
+	// 选择和配置USB接口、管道
 	status = SelectInterfaces(Device);
 	if (!NT_SUCCESS(status)) {
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP, "SelectInterfaces failed 0x%x\n", status);
@@ -461,7 +471,7 @@ KmdfUsbSetPowerPolicy(
 
 	PAGED_CODE();
 
-	// Init the idle policy structure.
+	// 设置设备为闲时休眠，闲时超过10S，自动进入休眠状态
 	WDF_DEVICE_POWER_POLICY_IDLE_SETTINGS_INIT(&idleSettings, IdleUsbSelectiveSuspend);
 	idleSettings.IdleTimeout = 10000; // 10-sec
 
@@ -471,7 +481,7 @@ KmdfUsbSetPowerPolicy(
 		return status;
 	}
 
-	// Init wait-wake policy structure.
+	// 设置为可远程唤醒，包含两个方面：1) 设备自身醒来  2) 当PC系统已经进入休眠后，设备可以将系统唤醒
 	WDF_DEVICE_POWER_POLICY_WAKE_SETTINGS_INIT(&wakeSettings);
 
 	status = WdfDeviceAssignSxWakeSettings(Device, &wakeSettings);
@@ -517,7 +527,10 @@ Return Value:
 
 	pDeviceContext = GetDeviceContext(Device);
 
+	// 初始化configParams，单个接口
 	WDF_USB_DEVICE_SELECT_CONFIG_PARAMS_INIT_SINGLE_INTERFACE(&configParams);
+
+	// 配置USB设备对象使用单个接口
 	status = WdfUsbTargetDeviceSelectConfig(pDeviceContext->UsbDevice, 
 		WDF_NO_OBJECT_ATTRIBUTES,
 		&configParams);
@@ -550,18 +563,21 @@ Return Value:
 		return status;
 	}
 
+	// 存储单个USB接口对象到设备环境变量中
 	pDeviceContext->UsbInterface = configParams.Types.SingleInterface.ConfiguredUsbInterface;
 
+	// 获取该单个接口对象中包含的管道（端点）个数
 	numberConfiguredPipes = configParams.Types.SingleInterface.NumberConfiguredPipes;
 
-	// Get pipe handles
+	// 获取并存储管道句柄
 	for (index = 0; index < numberConfiguredPipes; index++) {
 
 		WDF_USB_PIPE_INFORMATION_INIT(&pipeInfo);
 
+		// 返回接口指定的管道句柄及管道信息
 		pipe = WdfUsbInterfaceGetConfiguredPipe(
 			pDeviceContext->UsbInterface,
-			index, //PipeIndex,
+			index,			//PipeIndex,
 			&pipeInfo
 		);
 
@@ -573,6 +589,7 @@ Return Value:
 			pDeviceContext->InterruptPipe = pipe;
 		}
 
+		// The WdfUsbTargetPipeIsInEndpoint method determines whether a specified USB pipe is connected to an input endpoint.
 		if (WdfUsbPipeTypeBulk == pipeInfo.PipeType &&
 			WdfUsbTargetPipeIsInEndpoint(pipe)) {
 			TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "BulkInput Pipe is 0x%p\n", pipe);
@@ -592,7 +609,6 @@ Return Value:
 		&& pDeviceContext->BulkReadPipe && pDeviceContext->InterruptPipe)) {
 		status = STATUS_INVALID_DEVICE_STATE;
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_PNP, "Device is not configured properly %!STATUS!\n", status);
-
 		return status;
 	}
 
@@ -740,8 +756,7 @@ KmdfUsbEvtDeviceSelfManagedIoFlush(
 
 Routine Description:
 
-	This routine handles flush activity for the device's
-	self-managed I/O operations.
+	此例程处理设备的自我管理I/O操作的刷新活动
 
 Arguments:
 
@@ -821,7 +836,6 @@ Return Value:
 	// We want both memory objects to be children of the device so they will
 	// be deleted automatically when the device is removed.
 	//
-
 	WDF_OBJECT_ATTRIBUTES_INIT(&objectAttributes);
 	objectAttributes.ParentObject = Device;
 
@@ -829,7 +843,6 @@ Return Value:
 	// First get the length of the string. If the FriendlyName
 	// is not there then get the lenght of device description.
 	//
-
 	status = WdfDeviceAllocAndQueryProperty(Device,
 		DevicePropertyFriendlyName,
 		NonPagedPoolNx,
@@ -859,7 +872,6 @@ Return Value:
 	//
 	// Retrieve the device location string.
 	//
-
 	status = WdfDeviceAllocAndQueryProperty(Device,
 		DevicePropertyLocationInformation,
 		NonPagedPoolNx,

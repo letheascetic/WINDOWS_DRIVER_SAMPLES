@@ -69,9 +69,8 @@ Return Value:
 	PAGED_CODE();
 
 	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "--> KmdfUsbEvtIoDeviceControl\n");
-	//
+
 	// initialize variables
-	//
 	device = WdfIoQueueGetDevice(Queue);
 	pDevContext = GetDeviceContext(device);
 
@@ -79,11 +78,15 @@ Return Value:
 
 	case IOCTL_KMDFUSB_GET_CONFIG_DESCRIPTOR: 
 	{
+		// 获取配置描述符
+		// 1) 获取配置描述符长度
+		// 2) 获取IO请求的输出缓冲区地址
+		// 3) 获取配置描述符，存储至IO请求的输出缓冲区
 
 		PUSB_CONFIGURATION_DESCRIPTOR   configurationDescriptor = NULL;
 		USHORT                          requiredSize = 0;
 
-		// First get the size of the config descriptor
+		// 获取配置描述符长度requiredSize
 		status = WdfUsbTargetDeviceRetrieveConfigDescriptor(
 			pDevContext->UsbDevice,
 			NULL,
@@ -94,20 +97,24 @@ Return Value:
 			break;
 		}
 
+		// 获取request的输出缓冲区
 		// Get the buffer - make sure the buffer is big enough
 		status = WdfRequestRetrieveOutputBuffer(Request,
-			(size_t)requiredSize,  // MinimumRequired
-			&configurationDescriptor,
+			(size_t)requiredSize,			// 缓冲区的最小长度
+			&configurationDescriptor,		// request输出缓冲区的地址
 			NULL);
+
 		if (!NT_SUCCESS(status)) {
 			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "WdfRequestRetrieveOutputBuffer failed 0x%x\n", status);
 			break;
 		}
 
+		// 获取配置描述符，存储到configurationDescriptor
 		status = WdfUsbTargetDeviceRetrieveConfigDescriptor(
 			pDevContext->UsbDevice,
 			configurationDescriptor,
 			&requiredSize);
+
 		if (!NT_SUCCESS(status)) {
 			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "WdfUsbTargetDeviceRetrieveConfigDescriptor failed 0x%x\n", status);
 			break;
@@ -119,7 +126,7 @@ Return Value:
 		break;
 
 	case IOCTL_KMDFUSB_RESET_DEVICE:
-
+		// 重置设备
 		status = ResetDevice(device);
 		break;
 
@@ -330,8 +337,8 @@ Return Value:
 	// request down the stack.
 	//
 	status = WdfUsbTargetPipeResetSynchronously(Pipe,
-		WDF_NO_HANDLE, // WDFREQUEST
-		NULL // PWDF_REQUEST_SEND_OPTIONS
+		WDF_NO_HANDLE,	// WDFREQUEST
+		NULL			// PWDF_REQUEST_SEND_OPTIONS
 	);
 
 	if (NT_SUCCESS(status)) {
@@ -350,6 +357,11 @@ StopAllPipes(
 	IN PDEVICE_CONTEXT DeviceContext
 )
 {
+	// The WdfUsbTargetPipeGetIoTarget method returns a handle to the I/O target object that is associated with a specified USB pipe.
+	// The WdfIoTargetStop method stops sending queued requests to a local or remote I/O target.
+	// WdfIoTargetCancelSentIo，停止目标对象的措施类型
+	// 表明在停止目标对象前，取消已经在目标对象队列中的请求，等待所有请求完成，最后返回
+
 	WdfIoTargetStop(WdfUsbTargetPipeGetIoTarget(DeviceContext->InterruptPipe),
 		WdfIoTargetCancelSentIo);
 	WdfIoTargetStop(WdfUsbTargetPipeGetIoTarget(DeviceContext->BulkReadPipe),
@@ -392,8 +404,7 @@ ResetDevice(
 
 Routine Description:
 
-	This routine calls WdfUsbTargetDeviceResetPortSynchronously to reset the device if it's still
-	connected.
+	This routine calls WdfUsbTargetDeviceResetPortSynchronously to reset the device if it's still connected.
 
 Arguments:
 
@@ -414,27 +425,29 @@ Return Value:
 
 	pDeviceContext = GetDeviceContext(Device);
 
-	//
-	// A NULL timeout indicates an infinite wake
-	//
+	// 获取同步锁，等待时间无限，防止多线程重入
 	status = WdfWaitLockAcquire(pDeviceContext->ResetDeviceWaitLock, NULL);
 	if (!NT_SUCCESS(status)) {
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "ResetDevice - could not acquire lock\n");
 		return status;
 	}
 
+	// 停止所有管道
 	StopAllPipes(pDeviceContext);
 
+	// 同步方式重置USB设备
 	status = WdfUsbTargetDeviceResetPortSynchronously(pDeviceContext->UsbDevice);
 	if (!NT_SUCCESS(status)) {
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "ResetDevice failed - 0x%x\n", status);
 	}
 
+	// 启动所有管道
 	status = StartAllPipes(pDeviceContext);
 	if (!NT_SUCCESS(status)) {
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "Failed to start all pipes - 0x%x\n", status);
 	}
 
+	// 释放锁
 	WdfWaitLockRelease(pDeviceContext->ResetDeviceWaitLock);
 
 	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "<-- ResetDevice\n");
@@ -955,7 +968,7 @@ KmdfUsbIoctlGetInterruptMessage(
 Routine Description
 
 	This method handles the completion of the pended request for the IOCTL
-	IOCTL_OSRUSBFX2_GET_INTERRUPT_MESSAGE.
+	IOCTL_KMDFUSB_GET_INTERRUPT_MESSAGE.
 
 Arguments:
 
