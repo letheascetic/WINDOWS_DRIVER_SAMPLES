@@ -154,7 +154,6 @@ Return Value:
 		goto Error;
 	}
 
-	//
 	// We will create a separate sequential queue and configure it
 	// to receive read requests.  We also need to register a EvtIoStop
 	// handler so that we can acknowledge requests that are pending
@@ -162,8 +161,8 @@ Return Value:
 	// 创建非默认队列，串行处理，注册处理read请求的回调函数、注册EvtIoStop回调函数
 	WDF_IO_QUEUE_CONFIG_INIT(&ioQueueConfig, WdfIoQueueDispatchSequential);
 
-	// ioQueueConfig.EvtIoRead = OsrFxEvtIoRead;
-	// ioQueueConfig.EvtIoStop = OsrFxEvtIoStop;
+	ioQueueConfig.EvtIoRead = KmdfUsbEvtIoRead;
+	ioQueueConfig.EvtIoStop = KmdfUsbEvtIoStop;
 
 	status = WdfIoQueueCreate(
 		device,

@@ -50,5 +50,8 @@
     <ClCompile Include="Ioctl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Bulkrwr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

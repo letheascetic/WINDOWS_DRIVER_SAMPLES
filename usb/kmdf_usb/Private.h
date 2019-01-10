@@ -226,6 +226,17 @@ KmdfUsbIoctlGetInterruptMessage(
 
 
 //
+// Bulkrwr.c func
+//
+
+EVT_WDF_IO_QUEUE_IO_READ KmdfUsbEvtIoRead;
+EVT_WDF_IO_QUEUE_IO_STOP KmdfUsbEvtIoStop;
+EVT_WDF_REQUEST_COMPLETION_ROUTINE EvtRequestReadCompletionRoutine;
+
+
+
+
+//
 // Others
 //
 
