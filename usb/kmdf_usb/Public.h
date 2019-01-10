@@ -112,7 +112,7 @@ typedef struct _SWITCH_STATE {
 
 #pragma warning(pop)
 
-#define IOCTL_INDEX             0x800
+#define IOCTL_INDEX           0x800
 #define FILE_DEVICE_KMDFUSB   65500U
 
 #define IOCTL_KMDFUSB_GET_CONFIG_DESCRIPTOR CTL_CODE(FILE_DEVICE_KMDFUSB,     \

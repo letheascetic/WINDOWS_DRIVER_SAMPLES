@@ -132,7 +132,7 @@ Return Value:
 		break;
 
 	case IOCTL_KMDFUSB_GET_BAR_GRAPH_DISPLAY:
-		// Make sure the caller's output buffer is large enough to hold the state of the bar graph
+		
 		status = WdfRequestRetrieveOutputBuffer(Request,
 			sizeof(BAR_GRAPH_STATE),
 			&barGraphState,
@@ -142,12 +142,10 @@ Return Value:
 			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "User's output buffer is too small for this IOCTL, expecting an BAR_GRAPH_STATE\n");
 			break;
 		}
-		//
-		// Call our function to get the bar graph state
-		//
+
+		// 向USB设备发送控制传输请求，读取板卡上的值到barGraphState
 		status = GetBarGraphState(pDevContext, barGraphState);
 
-		// If we succeeded return the user their data
 		if (NT_SUCCESS(status)) {
 			bytesReturned = sizeof(BAR_GRAPH_STATE);
 		}
@@ -162,20 +160,16 @@ Return Value:
 			sizeof(BAR_GRAPH_STATE),
 			&barGraphState,
 			NULL);
+
 		if (!NT_SUCCESS(status)) {
-			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-				"User's input buffer is too small for this IOCTL, expecting an BAR_GRAPH_STATE\n");
+			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "User's input buffer is too small for this IOCTL, expecting an BAR_GRAPH_STATE\n");
 			break;
 		}
 
-		//
 		// Call our routine to set the bar graph state
-		//
 		status = SetBarGraphState(pDevContext, barGraphState);
 
-		//
 		// There's no data returned for this call
-		//
 		bytesReturned = 0;
 		break;
 
@@ -187,28 +181,19 @@ Return Value:
 			NULL);
 
 		if (!NT_SUCCESS(status)) {
-			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-				"User's output buffer is too small for this IOCTL, expecting an UCHAR\n");
+			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "User's output buffer is too small for this IOCTL, expecting an UCHAR\n");
 			break;
 		}
 
-		//
 		// Call our function to get the 7 segment state
-		//
 		status = GetSevenSegmentState(pDevContext, sevenSegment);
 
-		//
 		// If we succeeded return the user their data
-		//
 		if (NT_SUCCESS(status)) {
-
 			bytesReturned = sizeof(UCHAR);
-
 		}
 		else {
-
 			bytesReturned = 0;
-
 		}
 		break;
 
@@ -225,14 +210,9 @@ Return Value:
 			break;
 		}
 
-		//
-		// Call our routine to set the 7 segment state
-		//
 		status = SetSevenSegmentState(pDevContext, sevenSegment);
 
-		//
 		// There's no data returned for this call
-		//
 		bytesReturned = 0;
 		break;
 
@@ -244,40 +224,32 @@ Return Value:
 			NULL);// BufferLength
 
 		if (!NT_SUCCESS(status)) {
-			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-				"User's output buffer is too small for this IOCTL, expecting a SWITCH_STATE\n");
+			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "User's output buffer is too small for this IOCTL, expecting a SWITCH_STATE\n");
 			bytesReturned = sizeof(SWITCH_STATE);
 			break;
 
 		}
 
-		//
 		// Call our routine to get the state of the switches
-		//
 		status = GetSwitchState(pDevContext, switchState);
 
-		//
 		// If successful, return the user their data
-		//
 		if (NT_SUCCESS(status)) {
 
 			bytesReturned = sizeof(SWITCH_STATE);
 
 		}
 		else {
-			//
 			// Don't return any data
-			//
 			bytesReturned = 0;
 		}
 		break;
 
 	case IOCTL_KMDFUSB_GET_INTERRUPT_MESSAGE:
 
-		//
 		// Forward the request to an interrupt message queue and dont complete
 		// the request until an interrupt from the USB device occurs.
-		//
+		// 将请求转发到InterruptMsgQueue队列，等待处理
 		status = WdfRequestForwardToIoQueue(Request, pDevContext->InterruptMsgQueue);
 		if (NT_SUCCESS(status)) {
 			requestPending = TRUE;
@@ -294,7 +266,7 @@ Return Value:
 		WdfRequestCompleteWithInformation(Request, status, bytesReturned);
 	}
 
-	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "<-- OsrFxEvtIoDeviceControl\n");
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTL, "<-- KmdfUsbEvtIoDeviceControl\n");
 
 	return;
 }
@@ -504,28 +476,25 @@ Return Value:
 		0,								// 填充WDF_USB_CONTROL_SETUP_PACKET结构体的Packet.wValue.Value
 		0);								// 填充WDF_USB_CONTROL_SETUP_PACKET结构体的Packet.wIndex.Value
 
-
+	// 构建一个USB控制传输请求，以同步方式发送到指定的I/O Target
+	// 返回STATUS_IO_TIMEOUT，则表示请求超时
+	// 请求的句柄，NULL表示创建一个新的内部请求，但这个请求不能被取消
 	status = WdfUsbTargetDeviceSendControlTransferSynchronously(
 		DevContext->UsbDevice,
-		WDF_NO_HANDLE, // Optional WDFREQUEST
-		&sendOptions,
-		&controlSetupPacket,
-		NULL,		// MemoryDescriptor
-		NULL);		// BytesTransferred
+		WDF_NO_HANDLE,					// 请求的句柄，NULL表示创建一个新的内部请求，但这个请求不能被请求
+		&sendOptions,					// 请求参数句柄	
+		&controlSetupPacket,			// 控制传输令牌包句柄
+		NULL,							// MemoryDescriptor
+		NULL);							// 接收实际传输的字节数指针
 
 	if (!NT_SUCCESS(status)) {
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-			"ReenumerateDevice: Failed to Reenumerate - 0x%x \n", status);
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "ReenumerateDevice: Failed to Reenumerate - 0x%x \n", status);
 	}
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "<-- ReenumerateDevice\n");
 
-	//
 	// Send event to eventlog
-	//
-
 	activity = DeviceToActivityId(WdfObjectContextGetObject(DevContext));
-
 	/*
 		EventWriteDeviceReenumerated(&activity,
 		DevContext->DeviceName,
@@ -584,16 +553,15 @@ Return Value:
 	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
 		BmRequestDeviceToHost,
 		BmRequestToDevice,
-		KMDFUSB_READ_BARGRAPH_DISPLAY, // Request
-		0, // Value
-		0); // Index
+		KMDFUSB_READ_BARGRAPH_DISPLAY,  // Request
+		0,								// Value
+		0);								// Index
 
-//
-// Set the buffer to 0, the board will OR in everything that is set
-//
+	// Set the buffer to 0, the board will OR in everything that is set
 	BarGraphState->BarsAsUChar = 0;
 
-
+	// 初始化WDF_MEMORY_DESCRIPTOR结构体
+	// 这里使用了BarGraphState所指向的内存空间，而BarGraphState正是应用层发出的IOCTL请求的输出缓冲区
 	WDF_MEMORY_DESCRIPTOR_INIT_BUFFER(&memDesc,
 		BarGraphState,
 		sizeof(BAR_GRAPH_STATE));
@@ -608,14 +576,10 @@ Return Value:
 
 	if (!NT_SUCCESS(status)) {
 
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-			"GetBarGraphState: Failed to GetBarGraphState - 0x%x \n", status);
-
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "GetBarGraphState: Failed to GetBarGraphState - 0x%x \n", status);
 	}
 	else {
-
-		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL,
-			"GetBarGraphState: LED mask is 0x%x\n", BarGraphState->BarsAsUChar);
+		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "GetBarGraphState: LED mask is 0x%x\n", BarGraphState->BarsAsUChar);
 	}
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "<-- GetBarGraphState\n");
@@ -681,26 +645,21 @@ Return Value:
 
 	status = WdfUsbTargetDeviceSendControlTransferSynchronously(
 		DevContext->UsbDevice,
-		NULL, // Optional WDFREQUEST
+		NULL,					// Optional WDFREQUEST
 		&sendOptions,
 		&controlSetupPacket,
 		&memDesc,
 		&bytesTransferred);
 
 	if (!NT_SUCCESS(status)) {
-
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-			"SetBarGraphState: Failed - 0x%x \n", status);
-
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "SetBarGraphState: Failed - 0x%x \n", status);
 	}
 	else {
 
-		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL,
-			"SetBarGraphState: LED mask is 0x%x\n", BarGraphState->BarsAsUChar);
+		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "SetBarGraphState: LED mask is 0x%x\n", BarGraphState->BarsAsUChar);
 	}
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "<-- SetBarGraphState\n");
-
 	return status;
 
 }
@@ -784,17 +743,14 @@ Return Value:
 
 	if (!NT_SUCCESS(status)) {
 
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-			"GetSevenSegmentState: Failed to get 7 Segment state - 0x%x \n", status);
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "GetSevenSegmentState: Failed to get 7 Segment state - 0x%x \n", status);
 	}
 	else {
 
-		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL,
-			"GetSevenSegmentState: 7 Segment mask is 0x%x\n", *SevenSegment);
+		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "GetSevenSegmentState: 7 Segment mask is 0x%x\n", *SevenSegment);
 	}
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "GetSetSevenSegmentState: Exit\n");
-
 	return status;
 
 }
@@ -863,20 +819,13 @@ Return Value:
 		&bytesTransferred);
 
 	if (!NT_SUCCESS(status)) {
-
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-			"SetSevenSegmentState: Failed to set 7 Segment state - 0x%x \n", status);
-
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "SetSevenSegmentState: Failed to set 7 Segment state - 0x%x \n", status);
 	}
 	else {
-
-		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL,
-			"SetSevenSegmentState: 7 Segment mask is 0x%x\n", *SevenSegment);
-
+		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "SetSevenSegmentState: 7 Segment mask is 0x%x\n", *SevenSegment);
 	}
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "<-- SetSevenSegmentState\n");
-
 	return status;
 
 }
@@ -945,17 +894,13 @@ Return Value:
 		&bytesTransferred);
 
 	if (!NT_SUCCESS(status)) {
-		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-			"GetSwitchState: Failed to Get switches - 0x%x \n", status);
-
+		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "GetSwitchState: Failed to Get switches - 0x%x \n", status);
 	}
 	else {
-		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL,
-			"GetSwitchState: Switch mask is 0x%x\n", SwitchState->SwitchesAsUChar);
+		TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "GetSwitchState: Switch mask is 0x%x\n", SwitchState->SwitchesAsUChar);
 	}
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "<-- GetSwitchState\n");
-
 	return status;
 
 }
