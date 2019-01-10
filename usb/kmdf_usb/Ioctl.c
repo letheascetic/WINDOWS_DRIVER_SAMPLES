@@ -26,13 +26,12 @@ KmdfUsbEvtIoDeviceControl(
 
 Routine Description:
 
-	This event is called when the framework receives IRP_MJ_DEVICE_CONTROL
-	requests from the system.
+	This event is called when the framework receives IRP_MJ_DEVICE_CONTROL requests from the system.
 
 Arguments:
 
-	Queue - Handle to the framework queue object that is associated
-			with the I/O request.
+	Queue - Handle to the framework queue object that is associated with the I/O request.
+
 	Request - Handle to a framework request object.
 
 	OutputBufferLength - length of the request's output buffer,
@@ -40,8 +39,8 @@ Arguments:
 	InputBufferLength - length of the request's input buffer,
 						if an input buffer is available.
 
-	IoControlCode - the driver-defined or system-defined I/O control code
-					(IOCTL) that is associated with the request.
+	IoControlCode - the driver-defined or system-defined I/O control code (IOCTL) that is associated with the request.
+
 Return Value:
 
 	VOID
@@ -60,10 +59,7 @@ Return Value:
 	UNREFERENCED_PARAMETER(InputBufferLength);
 	UNREFERENCED_PARAMETER(OutputBufferLength);
 
-	//
-	// If your driver is at the top of its driver stack, EvtIoDeviceControl is called
-	// at IRQL = PASSIVE_LEVEL.
-	//
+	// If your driver is at the top of its driver stack, EvtIoDeviceControl is called at IRQL = PASSIVE_LEVEL.
 	_IRQL_limited_to_(PASSIVE_LEVEL);
 
 	PAGED_CODE();
@@ -121,7 +117,6 @@ Return Value:
 		}
 
 		bytesReturned = requiredSize;
-
 	}
 		break;
 
@@ -131,14 +126,12 @@ Return Value:
 		break;
 
 	case IOCTL_KMDFUSB_REENUMERATE_DEVICE:
-
-		// Otherwise, call our function to reenumerate the device
+		// 重新枚举USB设备
 		status = ReenumerateDevice(pDevContext);
 		bytesReturned = 0;
 		break;
 
 	case IOCTL_KMDFUSB_GET_BAR_GRAPH_DISPLAY:
-
 		// Make sure the caller's output buffer is large enough to hold the state of the bar graph
 		status = WdfRequestRetrieveOutputBuffer(Request,
 			sizeof(BAR_GRAPH_STATE),
@@ -146,8 +139,7 @@ Return Value:
 			NULL);
 
 		if (!NT_SUCCESS(status)) {
-			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
-				"User's output buffer is too small for this IOCTL, expecting an BAR_GRAPH_STATE\n");
+			TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "User's output buffer is too small for this IOCTL, expecting an BAR_GRAPH_STATE\n");
 			break;
 		}
 		//
@@ -485,22 +477,32 @@ Return Value:
 
 	TraceEvents(TRACE_LEVEL_VERBOSE, DBG_IOCTL, "--> ReenumerateDevice\n");
 
+	// 初始化WDF_REQUEST_SEND_OPTIONS结构体，开启指定的功能标志位
+	// 这里开启的是WDF_REQUEST_SEND_OPTION_TIMEOUT标志位，开启后WDF_REQUEST_SEND_OPTIONS结构体的Timeout成员值才有效
 	WDF_REQUEST_SEND_OPTIONS_INIT(
 		&sendOptions,
 		WDF_REQUEST_SEND_OPTION_TIMEOUT
 	);
 
+	// 设置Timeout的值，经过一段时间后请求还没完成，则框架会取消该请求
+	// Timeout为负数，表示与当前系统时间的时间间隔
+	// Timeout为正，表示自1601-01-01计时的绝对时间
+	// Timeout为0，表示不设置超时时间
+	// 如果请求因超时被取消，框架为该请求返回状态码为STATUS_IO_TIMEOUT
+	// 如果请求超时，但在框架取消前请求完成了，则返回的状态码就不是STATUS_IO_TIMEOUT
 	WDF_REQUEST_SEND_OPTIONS_SET_TIMEOUT(
 		&sendOptions,
 		DEFAULT_CONTROL_TRANSFER_TIMEOUT
 	);
 
-	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
-		BmRequestHostToDevice,
-		BmRequestToDevice,
-		USBFX2LK_REENUMERATE, // Request
-		0, // Value
-		0); // Index
+	// 初始化WDF_USB_CONTROL_SETUP_PACKET结构体，用于vendor自定义的控制传输
+	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(
+		&controlSetupPacket,			// WDF_USB_CONTROL_SETUP_PACKET结构体
+		BmRequestHostToDevice,			// 方向，主机到设备、设备到主机，填充Packet.bm.Request.Dir
+		BmRequestToDevice,				// 接收者（设备、接口、端点或其他），填充Packet.bm.Request.Recipient
+		KMDFUSB_REENUMERATE,			// 填充WDF_USB_CONTROL_SETUP_PACKET结构体的Packet.bRequest
+		0,								// 填充WDF_USB_CONTROL_SETUP_PACKET结构体的Packet.wValue.Value
+		0);								// 填充WDF_USB_CONTROL_SETUP_PACKET结构体的Packet.wIndex.Value
 
 
 	status = WdfUsbTargetDeviceSendControlTransferSynchronously(
@@ -508,8 +510,8 @@ Return Value:
 		WDF_NO_HANDLE, // Optional WDFREQUEST
 		&sendOptions,
 		&controlSetupPacket,
-		NULL, // MemoryDescriptor
-		NULL); // BytesTransferred
+		NULL,		// MemoryDescriptor
+		NULL);		// BytesTransferred
 
 	if (!NT_SUCCESS(status)) {
 		TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL,
@@ -582,7 +584,7 @@ Return Value:
 	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
 		BmRequestDeviceToHost,
 		BmRequestToDevice,
-		USBFX2LK_READ_BARGRAPH_DISPLAY, // Request
+		KMDFUSB_READ_BARGRAPH_DISPLAY, // Request
 		0, // Value
 		0); // Index
 
@@ -669,7 +671,7 @@ Return Value:
 	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
 		BmRequestHostToDevice,
 		BmRequestToDevice,
-		USBFX2LK_SET_BARGRAPH_DISPLAY, // Request
+		KMDFUSB_SET_BARGRAPH_DISPLAY, // Request
 		0, // Value
 		0); // Index
 
@@ -759,7 +761,7 @@ Return Value:
 	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
 		BmRequestDeviceToHost,
 		BmRequestToDevice,
-		USBFX2LK_READ_7SEGMENT_DISPLAY, // Request
+		KMDFUSB_READ_7SEGMENT_DISPLAY, // Request
 		0, // Value
 		0); // Index
 
@@ -844,7 +846,7 @@ Return Value:
 	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
 		BmRequestHostToDevice,
 		BmRequestToDevice,
-		USBFX2LK_SET_7SEGMENT_DISPLAY, // Request
+		KMDFUSB_SET_7SEGMENT_DISPLAY, // Request
 		0, // Value
 		0); // Index
 
@@ -924,7 +926,7 @@ Return Value:
 	WDF_USB_CONTROL_SETUP_PACKET_INIT_VENDOR(&controlSetupPacket,
 		BmRequestDeviceToHost,
 		BmRequestToDevice,
-		USBFX2LK_READ_SWITCHES, // Request
+		KMDFUSB_READ_SWITCHES, // Request
 		0, // Value
 		0); // Index
 
@@ -989,23 +991,21 @@ Return Value:
 	pDevContext = GetDeviceContext(Device);
 
 	do {
-		// Check if there are any pending requests in the Interrupt Message Queue.
-		// If a request is found then complete the pending request.
+		// 从指定队列获取下一个待处理的IO请求
 		status = WdfIoQueueRetrieveNextRequest(pDevContext->InterruptMsgQueue, &request);
 
 		if (NT_SUCCESS(status)) {
+			// 获取当前request的输出缓冲区到switchState
 			status = WdfRequestRetrieveOutputBuffer(request,
 				sizeof(SWITCH_STATE),
 				&switchState,
 				NULL);	// BufferLength
 
 			if (!NT_SUCCESS(status)) {
-
 				TraceEvents(TRACE_LEVEL_ERROR, DBG_IOCTL, "User's output buffer is too small for this IOCTL, expecting a SWITCH_STATE\n");
 				bytesReturned = sizeof(SWITCH_STATE);
 			}
 			else {
-
 				// Copy the state information saved by the continuous reader.
 				if (NT_SUCCESS(ReaderStatus)) {
 					switchState->SwitchesAsUChar = pDevContext->CurrentSwitchState;
@@ -1016,13 +1016,9 @@ Return Value:
 				}
 			}
 
-			//
 			// Complete the request.  If we failed to get the output buffer then
 			// complete with that status.  Otherwise complete with the status from the reader.
-			//
-			WdfRequestCompleteWithInformation(request,
-				NT_SUCCESS(status) ? ReaderStatus : status,
-				bytesReturned);
+			WdfRequestCompleteWithInformation(request, NT_SUCCESS(status) ? ReaderStatus : status, bytesReturned);
 			status = STATUS_SUCCESS;
 
 		}

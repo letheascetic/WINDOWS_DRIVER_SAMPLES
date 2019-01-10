@@ -113,7 +113,6 @@ Return Value:
 	pnpCaps.SurpriseRemovalOK = WdfTrue;
 	WdfDeviceSetPnpCapabilities(device, &pnpCaps);
 
-
 	// 创建队列，共四个队列
 	// a) 默认并行队列，分发IO请求
 	// b) 非默认串行队列，处理IO读请求
@@ -442,7 +441,7 @@ Return Value:
 		return status;
 	}
 
-	// Enable wait-wake and idle timeout if the device supports it
+	// 如果设备支持闲时休眠和唤醒功能，则进行设置
 	if (waitWakeEnable) {
 		status = KmdfUsbSetPowerPolicy(Device);
 		if (!NT_SUCCESS(status)) {
@@ -451,6 +450,7 @@ Return Value:
 		}
 	}
 
+	// 配置连续读端口
 	status = KmdfUsbConfigContReaderForInterruptEndPoint(pDeviceContext);
 
 	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_PNP, "<-- KmdfUsbEvtDevicePrepareHardware\n");
@@ -704,7 +704,6 @@ Routine Description:
 	The device is still in D0 when this callback is invoked, which means that
 	the driver can still touch hardware in this routine.
 
-
 	EvtDeviceD0Exit event callback must perform any operations that are
 	necessary before the specified device is moved out of the D0 state.  If the
 	driver needs to save hardware state before the device is powered down, then
@@ -735,9 +734,7 @@ Return Value:
 
 	PAGED_CODE();
 
-	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_POWER,
-		"-->KmdfUsbEvtDeviceD0Exit - moving to %s\n",
-		DbgDevicePowerString(TargetState));
+	TraceEvents(TRACE_LEVEL_INFORMATION, DBG_POWER, "-->KmdfUsbEvtDeviceD0Exit - moving to %s\n", DbgDevicePowerString(TargetState));
 
 	pDeviceContext = GetDeviceContext(Device);
 

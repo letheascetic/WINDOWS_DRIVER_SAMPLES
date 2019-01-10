@@ -29,13 +29,13 @@ extern const __declspec(selectany) LONGLONG DEFAULT_CONTROL_TRANSFER_TIMEOUT = 5
 //
 // Define the vendor commands supported by our device
 //
-#define USBFX2LK_READ_7SEGMENT_DISPLAY      0xD4
-#define USBFX2LK_READ_SWITCHES              0xD6
-#define USBFX2LK_READ_BARGRAPH_DISPLAY      0xD7
-#define USBFX2LK_SET_BARGRAPH_DISPLAY       0xD8
-#define USBFX2LK_IS_HIGH_SPEED              0xD9
-#define USBFX2LK_REENUMERATE                0xDA
-#define USBFX2LK_SET_7SEGMENT_DISPLAY       0xDB
+#define KMDFUSB_READ_7SEGMENT_DISPLAY      0xD4
+#define KMDFUSB_READ_SWITCHES              0xD6
+#define KMDFUSB_READ_BARGRAPH_DISPLAY      0xD7
+#define KMDFUSB_SET_BARGRAPH_DISPLAY       0xD8
+#define KMDFUSB_IS_HIGH_SPEED              0xD9
+#define KMDFUSB_REENUMERATE                0xDA
+#define KMDFUSB_SET_7SEGMENT_DISPLAY       0xDB
 
 //
 // Define the features that we can clear
@@ -150,27 +150,14 @@ KmdfUsbSetPowerPolicy(
 // Interrupt.c func
 //
 
+EVT_WDF_USB_READER_COMPLETION_ROUTINE KmdfUsbEvtUsbInterruptPipeReadComplete;
+EVT_WDF_USB_READERS_FAILED KmdfUsbEvtUsbInterruptReadersFailed;
+
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS
 KmdfUsbConfigContReaderForInterruptEndPoint(
 	_In_ PDEVICE_CONTEXT DeviceContext
 );
-
-VOID
-KmdfUsbEvtUsbInterruptPipeReadComplete(
-	WDFUSBPIPE  Pipe,
-	WDFMEMORY   Buffer,
-	size_t      NumBytesTransferred,
-	WDFCONTEXT  Context
-);
-
-BOOLEAN
-KmdfUsbEvtUsbInterruptReadersFailed(
-	_In_ WDFUSBPIPE Pipe,
-	_In_ NTSTATUS Status,
-	_In_ USBD_STATUS UsbdStatus
-);
-
 
 //
 // Ioctl.c func
